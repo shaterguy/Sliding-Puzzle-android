@@ -38,8 +38,9 @@ public class GameUiTest {
   nearComplete(false);
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
    onView(withId(1008)).perform(click());scenario.onActivity(a->assertEquals(4,a.s.puzzle.moves));
-   onView(withId(1008)).perform(new GeneralSwipeAction(Swipe.FAST,GeneralLocation.CENTER_LEFT,GeneralLocation.CENTER_RIGHT,Press.FINGER));scenario.onActivity(a->assertEquals(4,a.s.puzzle.moves));
-   onView(withId(1008)).perform(new GeneralSwipeAction(Swipe.FAST,GeneralLocation.CENTER_RIGHT,GeneralLocation.CENTER_LEFT,Press.FINGER));
+   onView(withId(1008)).perform(swipeRight());scenario.onActivity(a->assertEquals(4,a.s.puzzle.moves));
+   onView(withId(1008)).perform(swipeLeft());
+   scenario.onActivity(a->{assertTrue("Inward swipe must move the tile",a.s.puzzle.solved());assertEquals(5,a.s.puzzle.moves);});
    onView(withId(202)).check(matches(withText("완성했어요!")));
    scenario.onActivity(a->{assertTrue(a.s.puzzle.solved());assertEquals(5,a.s.puzzle.moves);});
   }
