@@ -58,8 +58,9 @@ jobs:
           script: |
             gradle --no-daemon :app:connectedDevDebugAndroidTest
             mkdir -p runtime-evidence
-            adb shell am start -n com.shaterguy.slidingpuzzle.dev/com.shaterguy.slidingpuzzle.MainActivity
+            adb shell am start -W -n com.shaterguy.slidingpuzzle.dev/com.shaterguy.slidingpuzzle.MainActivity
             adb shell input keyevent 82
+            sleep 1
             adb exec-out screencap -p > runtime-evidence/home.png
       - name: Verify and identify canonical APK
         shell: bash
