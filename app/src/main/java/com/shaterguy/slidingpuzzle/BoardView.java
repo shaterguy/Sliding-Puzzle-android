@@ -23,6 +23,7 @@ final class BoardView extends android.widget.FrameLayout {
   long duration=android.animation.ValueAnimator.areAnimatorsEnabled()?160:0;
   tile.setElevation(6*density);tile.animate().translationX((blank%puzzle.size-from%puzzle.size)*cell).translationY((blank/puzzle.size-from/puzzle.size)*cell).setDuration(duration).withEndAction(finished).start();
  }
+ @Override protected void onDetachedFromWindow(){for(int i=0;i<getChildCount();i++)getChildAt(i).animate().cancel();super.onDetachedFromWindow();}
  final class Tile extends View {
   final int index,value;final Paint paint=new Paint(3);float sx,sy;boolean cancelled;
   Tile(Context context,int index){super(context);this.index=index;value=puzzle.tile(index);
