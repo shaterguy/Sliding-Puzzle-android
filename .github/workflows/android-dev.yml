@@ -104,7 +104,7 @@ jobs:
             adb install staging/baseline.apk | tee runtime-evidence/install-baseline.txt
             adb shell dumpsys package "$DEV_PACKAGE" | grep -F 'versionCode=1' | tee runtime-evidence/baseline-version.txt
             adb shell am start -W -n "$DEV_PACKAGE/com.shaterguy.slidingpuzzle.MainActivity" | tee runtime-evidence/baseline-launch.txt
-            adb shell run-as "$DEV_PACKAGE" sh -c 'echo update-lineage > files/update-lineage.txt'
+            adb shell run-as "$DEV_PACKAGE" sh -c 'mkdir -p files && echo update-lineage > files/update-lineage.txt'
             adb install -r staging/current.apk | tee runtime-evidence/update-install.txt
             adb shell dumpsys package "$DEV_PACKAGE" | grep -F "versionCode=$DEV_VERSION_CODE" | tee runtime-evidence/current-version.txt
             adb shell run-as "$DEV_PACKAGE" cat files/update-lineage.txt | grep -F 'update-lineage' | tee runtime-evidence/data-preserved.txt
