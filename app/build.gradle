@@ -1,4 +1,6 @@
 plugins { id 'com.android.application' }
+
+def requestedVersionCode = providers.gradleProperty('appVersionCode').orElse('2').get().toInteger()
 android {
  namespace 'com.shaterguy.slidingpuzzle'
  compileSdk 35
@@ -6,13 +8,13 @@ android {
   applicationId 'com.shaterguy.slidingpuzzle'
   minSdk 26
   targetSdk 35
-  versionCode 1
+  versionCode requestedVersionCode
   versionName '0.1.0'
   testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
  }
  flavorDimensions += 'channel'
  productFlavors {
-  dev { dimension 'channel'; applicationIdSuffix '.dev'; versionNameSuffix '-dev1'; resValue 'string', 'app_name', '슬라이딩 퍼즐 DEV' }
+  dev { dimension 'channel'; applicationIdSuffix '.dev'; versionNameSuffix '-dev2'; resValue 'string', 'app_name', '슬라이딩 퍼즐 DEV' }
   production { dimension 'channel'; resValue 'string', 'app_name', '슬라이딩 퍼즐' }
  }
  signingConfigs {
@@ -35,6 +37,5 @@ dependencies {
  androidTestImplementation 'androidx.test:rules:1.6.1'
  androidTestImplementation 'androidx.test.ext:junit:1.2.1'
  androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+ androidTestImplementation 'androidx.test.espresso:espresso-intents:3.6.1'
 }
-
-dependencies { androidTestImplementation 'androidx.test.espresso:espresso-intents:3.6.1' }

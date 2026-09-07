@@ -26,7 +26,7 @@ public class GameUiTest {
  private Context context;
  @Before public void reset(){context=InstrumentationRegistry.getInstrumentation().getTargetContext();context.getSharedPreferences("puzzle",0).edit().clear().commit();for(File f:new PhotoStore(context).list())f.delete();}
  private void nearComplete(boolean tap){
-  context.getSharedPreferences("puzzle",0).edit().putString("screen","game").putString("mode","number").putInt("size",3).putString("tiles","1,2,3,4,5,6,7,0,8").putInt("moves",4).putBoolean("tap",tap).commit();
+  context.getSharedPreferences("puzzle",0).edit().putString("screen","game").putString("mode","number").putInt("size",3).putString("tiles","1,2,3,4,5,6,7,0,8").putInt("moves",4).putInt("starBaseline",1).putBoolean("tap",tap).commit();
  }
  private void idle(){InstrumentationRegistry.getInstrumentation().waitForIdleSync();}
  private void waitForPhoto(ActivityScenario<MainActivity> scenario)throws Exception{
@@ -37,12 +37,20 @@ public class GameUiTest {
  @Test public void defaultTapDoesNotMoveButSwipeCompletes()throws Exception{
   nearComplete(false);
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+   onView(withId(204)).check(matches(isDisplayed()));
    onView(withId(1008)).perform(click());scenario.onActivity(a->assertEquals(4,a.s.puzzle.moves));
    onView(withId(1008)).perform(swipeRight());scenario.onActivity(a->assertEquals(4,a.s.puzzle.moves));
    onView(withId(1008)).perform(swipeLeft());
    scenario.onActivity(a->{assertTrue("Inward swipe must move the tile",a.s.puzzle.solved());assertEquals(5,a.s.puzzle.moves);});
-   onView(withId(202)).check(matches(withText("완성했어요!")));
-   scenario.onActivity(a->{assertTrue(a.s.puzzle.solved());assertEquals(5,a.s.puzzle.moves);});
+   onView(withId(202)).check(matches(withText("완성했어요!")));onView(withId(203)).check(matches(withText("★★★")));onView(withId(205)).check(matches(isDisplayed()));
+   scenario.onActivity(a->{assertTrue(a.s.puzzle.solved());assertEquals(5,a.s.puzzle.moves);assertEquals(1,a.s.starBaseline);});
+  }
+ }
+ @Test public void generousTwoStarBandShowsTwoLargeStars(){
+  context.getSharedPreferences("puzzle",0).edit().putString("screen","game").putString("mode","number").putInt("size",3).putString("tiles","1,2,3,4,5,6,7,0,8").putInt("moves",20).putInt("starBaseline",1).putBoolean("tap",true).commit();
+  try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+   onView(withId(1008)).perform(click());onView(withId(203)).check(matches(withText("★★")));onView(withText("별 2개 획득!")).check(matches(isDisplayed()));onView(withId(205)).check(matches(isDisplayed()));
+   scenario.onActivity(a->assertEquals("done",a.s.screen));
   }
  }
  @Test public void tapSettingPersistsAndCompletes(){
@@ -53,13 +61,13 @@ public class GameUiTest {
    assertTrue(context.getSharedPreferences("puzzle",0).getBoolean("tap",false));
   }
  }
- @Test public void rotationAndRelaunchPreserveBoard(){
+ @Test public void rotationAndRelaunchPreserveBoardAndStarBaseline(){
   nearComplete(false);
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
-   scenario.recreate();scenario.onActivity(a->{assertEquals("1,2,3,4,5,6,7,0,8",a.s.puzzle.encode());assertEquals(4,a.s.puzzle.moves);});
+   scenario.recreate();scenario.onActivity(a->{assertEquals("1,2,3,4,5,6,7,0,8",a.s.puzzle.encode());assertEquals(4,a.s.puzzle.moves);assertEquals(1,a.s.starBaseline);});
   }
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
-   scenario.onActivity(a->assertEquals("1,2,3,4,5,6,7,0,8",a.s.puzzle.encode()));
+   scenario.onActivity(a->{assertEquals("1,2,3,4,5,6,7,0,8",a.s.puzzle.encode());assertEquals(1,a.s.starBaseline);});
   }
  }
  @Test public void coldShareImportsReusesAndDeletesOnlyCopy()throws Exception{
@@ -70,7 +78,7 @@ public class GameUiTest {
    waitForPhoto(scenario);onView(withId(106)).check(matches(isDisplayed()));
    scenario.onActivity(a->{assertEquals("prepare",a.s.screen);assertEquals(a.s.bitmap.getWidth(),a.s.bitmap.getHeight());name[0]=a.s.photo;});
    onView(withId(106)).perform(scrollTo(),click());scenario.recreate();
-   scenario.onActivity(a->{assertEquals("photo",a.s.mode);assertEquals(name[0],a.s.photo);assertNotNull(a.s.bitmap);});
+   scenario.onActivity(a->{assertEquals("photo",a.s.mode);assertEquals(name[0],a.s.photo);assertNotNull(a.s.bitmap);assertTrue(a.s.starBaseline>0);});
    onView(withId(110)).perform(click());onView(withId(102)).perform(click());
    onView(withText("이 사진 사용")).perform(scrollTo(),click());waitForPhoto(scenario);
    scenario.onActivity(a->assertEquals(name[0],a.s.photo));
@@ -91,7 +99,7 @@ public class GameUiTest {
   Intent share=new Intent(context,MainActivity.class).setAction(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM,Uri.parse("content://com.shaterguy.slidingpuzzle.testphotos/photo"));
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(share)){
    waitForPhoto(scenario);context.getSharedPreferences("puzzle",0).edit().putBoolean("tap",true).commit();
-   scenario.onActivity(a->{a.s.puzzle=Puzzle.restore(3,"1,2,3,4,5,6,7,0,8",12);a.s.size=3;a.s.screen="game";});
+   scenario.onActivity(a->{a.s.puzzle=Puzzle.restore(3,"1,2,3,4,5,6,7,0,8",12);a.s.size=3;a.s.starBaseline=1;a.s.screen="game";});
    scenario.recreate();onView(withId(1008)).perform(click());onView(withId(202)).check(matches(isDisplayed()));
    long[] duration={0};
    scenario.onActivity(a->{
@@ -102,7 +110,7 @@ public class GameUiTest {
     assertEquals(expected,actual);drawn.recycle();
    });
    onView(withId(1000)).perform(click());scenario.recreate();
-   scenario.onActivity(a->{assertEquals(13,a.s.puzzle.moves);assertEquals(duration[0],a.s.elapsed);assertEquals("done",a.s.screen);});
+   scenario.onActivity(a->{assertEquals(13,a.s.puzzle.moves);assertEquals(duration[0],a.s.elapsed);assertEquals("done",a.s.screen);assertEquals(1,a.s.starBaseline);});
   }
  }
  @Test public void pickerButtonImportsReturnedPhoto()throws Exception{

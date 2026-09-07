@@ -15,15 +15,15 @@ import java.util.concurrent.*;
 
 /** Offline sliding puzzle. Images are copied only after explicit pick/share. */
 public class MainActivity extends Activity {
- static final int INK=0xff243449,TEAL=0xff087F8C,CREAM=0xffFFF9EE,PEACH=0xffFFB98F;
+ static final int INK=0xff243449,TEAL=0xff087F8C,CREAM=0xffFFF9EE,PEACH=0xffFFB98F,GOLD=0xffE5A500;
  private static final ExecutorService IO=Executors.newSingleThreadExecutor();
  private static final Handler MAIN=new Handler(Looper.getMainLooper());
  static class Session {
-  String screen="home",photo="",mode="number";int size=3;Puzzle puzzle;
+  String screen="home",photo="",mode="number";int size=3,starBaseline=0;Puzzle puzzle;
   Bitmap bitmap;long elapsed=0;boolean started=false,pending=false;int generation=0;MainActivity activity;
  }
  Session s; private android.content.SharedPreferences prefs;private PhotoStore photos;
- private LinearLayout content;private FrameLayout root;private BoardView board;private TextView stats;
+ private LinearLayout content;private FrameLayout root;private BoardView board;private TextView stats;private StarMeterView starMeter;
  private long runningSince=0;private boolean foreground=false,moving=false;private ConfettiView confetti;
  private final Runnable ticker=new Runnable(){public void run(){updateStats();if(foreground&&runningSince>0)MAIN.postDelayed(this,1000);}};
  @Override public void onCreate(Bundle state){
@@ -35,12 +35,13 @@ public class MainActivity extends Activity {
   if(!s.photo.isEmpty()&&s.bitmap==null&&!s.pending)loadPhoto(s.photo,false);
  }
  private void restore(){
-  s.screen=prefs.getString("screen","home");s.mode=prefs.getString("mode","number");s.photo=prefs.getString("photo","");s.size=prefs.getInt("size",3);
+  s.screen=prefs.getString("screen","home");s.mode=prefs.getString("mode","number");s.photo=prefs.getString("photo","");s.size=prefs.getInt("size",3);s.starBaseline=Math.max(0,prefs.getInt("starBaseline",0));
   if(s.size<3||s.size>6)s.size=3;
   s.elapsed=Math.max(0,prefs.getLong("elapsed",0));s.started=prefs.getBoolean("started",false);
   String encoded=prefs.getString("tiles","");
   if(!encoded.isEmpty())try{s.puzzle=Puzzle.restore(s.size,encoded,prefs.getInt("moves",0));}catch(RuntimeException bad){s.screen="home";}
   if(s.puzzle==null&&(s.screen.equals("game")||s.screen.equals("done")))s.screen="home";
+  if(s.puzzle!=null&&s.starBaseline<=0)s.starBaseline=StarRating.legacyBaseline(s.puzzle);
  }
  @Override public Object onRetainNonConfigurationInstance(){return s;}
  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);receive(intent);}
@@ -64,7 +65,7 @@ public class MainActivity extends Activity {
  private void save(){saveSession(s,prefs,elapsed());}
  private static void saveSession(Session state,android.content.SharedPreferences preferences,long elapsed){
   android.content.SharedPreferences.Editor e=preferences.edit().putString("screen",state.screen).putString("mode",state.mode).putString("photo",state.photo).putInt("size",state.size).putLong("elapsed",elapsed).putBoolean("started",state.started);
-  if(state.puzzle!=null)e.putString("tiles",state.puzzle.encode()).putInt("moves",state.puzzle.moves);else e.remove("tiles").remove("moves");
+  if(state.puzzle!=null)e.putString("tiles",state.puzzle.encode()).putInt("moves",state.puzzle.moves).putInt("starBaseline",state.starBaseline);else e.remove("tiles").remove("moves").remove("starBaseline");
   e.apply();
  }
  int dp(float n){return (int)(getResources().getDisplayMetrics().density*n+.5f);}
@@ -76,7 +77,7 @@ public class MainActivity extends Activity {
  }
  private void primary(Button b){b.setTextColor(Color.WHITE);b.setBackground(shape(TEAL,16));}
  private void render(){
-  moving=false;if(confetti!=null){confetti.stop();confetti=null;}
+  moving=false;starMeter=null;if(confetti!=null){confetti.stop();confetti=null;}
   root=new FrameLayout(this);root.setBackgroundColor(CREAM);
   root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
   ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
@@ -90,7 +91,7 @@ public class MainActivity extends Activity {
  }
  private void sizes(){
   content.addView(text("퍼즐 크기",17));LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER);content.addView(row,new LinearLayout.LayoutParams(-1,-2));
-  for(int n=3;n<=6;n++){final int size=n;Button b=button(n+" × "+n+"\n"+(n*n-1)+"조각",300+n,()->{s.size=size;s.puzzle=null;save();render();});b.setTextSize(13);if(n==s.size)primary(b);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(70),1);p.setMargins(dp(2),dp(4),dp(2),dp(4));row.addView(b,p);}
+  for(int n=3;n<=6;n++){final int size=n;Button b=button(n+" × "+n+"\n"+(n*n-1)+"조각",300+n,()->{s.size=size;s.puzzle=null;s.starBaseline=0;save();render();});b.setTextSize(13);if(n==s.size)primary(b);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(70),1);p.setMargins(dp(2),dp(4),dp(2),dp(4));row.addView(b,p);}
  }
  private void renderHome(){
   heading("슬라이딩 퍼즐","한 칸씩, 제자리로!");
@@ -123,7 +124,7 @@ public class MainActivity extends Activity {
  }
  private void loadThumbnail(File file,ImageView view){IO.execute(()->{BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=8;Bitmap b=BitmapFactory.decodeFile(file.getPath(),options);MAIN.post(()->{if(!isDestroyed()&&view.isAttachedToWindow())view.setImageBitmap(b);});});}
  private void deletePhoto(String name){
-  try{photos.delete(name);if(name.equals(s.photo)){s.photo="";s.bitmap=null;s.puzzle=null;}save();render();}catch(Exception e){toast("사진을 삭제하지 못했습니다. 다시 시도해 주세요.");}
+  try{photos.delete(name);if(name.equals(s.photo)){s.photo="";s.bitmap=null;s.puzzle=null;s.starBaseline=0;}save();render();}catch(Exception e){toast("사진을 삭제하지 못했습니다. 다시 시도해 주세요.");}
  }
  private void pickPhoto(){
   Intent intent=Build.VERSION.SDK_INT>=33?new Intent(MediaStore.ACTION_PICK_IMAGES):new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE);
@@ -145,7 +146,7 @@ public class MainActivity extends Activity {
    MAIN.post(()->{
     if(generation!=state.generation)return;
     state.pending=false;
-    if(message==null){state.photo=result;state.bitmap=image;state.mode="photo";state.screen="prepare";state.puzzle=null;state.started=false;state.elapsed=0;}
+    if(message==null){state.photo=result;state.bitmap=image;state.mode="photo";state.screen="prepare";state.puzzle=null;state.starBaseline=0;state.started=false;state.elapsed=0;}
     saveSession(state,preferences,state.elapsed);
     MainActivity activity=state.activity;if(activity!=null){activity.render();if(message!=null){activity.toast(message);activity.resumeClock();}}
    });
@@ -155,29 +156,34 @@ public class MainActivity extends Activity {
   pauseClock();final Session state=s;final int generation=++state.generation;state.pending=true;render();final PhotoStore store=photos;final android.content.SharedPreferences preferences=prefs;
   IO.execute(()->{Bitmap b=null;try{b=store.load(name);}catch(Exception|OutOfMemoryError ignored){}final Bitmap result=b;
    MAIN.post(()->{if(generation!=state.generation)return;state.pending=false;
-    if(result!=null){state.photo=name;state.bitmap=result;state.mode="photo";if(prepare){state.screen="prepare";state.puzzle=null;state.started=false;state.elapsed=0;}}
-    else{state.photo="";state.bitmap=null;state.screen="prepare";state.puzzle=null;state.started=false;}
+    if(result!=null){state.photo=name;state.bitmap=result;state.mode="photo";if(prepare){state.screen="prepare";state.puzzle=null;state.starBaseline=0;state.started=false;state.elapsed=0;}}
+    else{state.photo="";state.bitmap=null;state.screen="prepare";state.puzzle=null;state.starBaseline=0;state.started=false;}
     saveSession(state,preferences,state.elapsed);MainActivity a=state.activity;if(a!=null){a.render();a.resumeClock();if(result==null)a.toast("저장한 사진을 읽을 수 없습니다. 사진을 다시 선택해 주세요.");}
    });
   });
  }
  private void startGame(){
   if(s.mode.equals("photo")&&s.bitmap==null){toast("먼저 사진을 선택해 주세요.");return;}
-  pauseClock();s.puzzle=new Puzzle(s.size);s.puzzle.shuffle(new Random());s.elapsed=0;s.started=false;s.screen="game";save();render();
+  pauseClock();s.puzzle=new Puzzle(s.size);s.puzzle.shuffle(new Random());s.starBaseline=StarRating.minimumMoveBaseline(s.puzzle);s.elapsed=0;s.started=false;s.screen="game";save();render();
  }
+ private StarRating rating(){if(s.puzzle==null)throw new IllegalStateException("puzzle");if(s.starBaseline<=0)s.starBaseline=StarRating.legacyBaseline(s.puzzle);return StarRating.fromBaseline(s.size,s.starBaseline);}
+ private String starString(int count){StringBuilder out=new StringBuilder();for(int i=0;i<count;i++)out.append('★');return out.toString();}
+ private int earnedStars(){return rating().starsForMoves(s.puzzle.moves);}
  private void renderGame(){
   if(s.puzzle==null){s.screen="home";render();return;}
   LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);content.addView(top,new LinearLayout.LayoutParams(-1,-2));
-  Button back=button("‹",110,()->confirmDiscard(()->{pauseClock();s.screen="home";s.puzzle=null;save();render();}));back.setContentDescription("다른 퍼즐 선택");top.addView(back,new LinearLayout.LayoutParams(dp(52),dp(48)));
+  Button back=button("‹",110,()->confirmDiscard(()->{pauseClock();s.screen="home";s.puzzle=null;s.starBaseline=0;save();render();}));back.setContentDescription("다른 퍼즐 선택");top.addView(back,new LinearLayout.LayoutParams(dp(52),dp(48)));
   TextView title=text(s.mode.equals("photo")?"사진 퍼즐":"숫자 퍼즐",22);title.setGravity(Gravity.CENTER);title.setTypeface(null,Typeface.BOLD);top.addView(title,new LinearLayout.LayoutParams(0,-2,1));
   Button setting=button("설정",111,this::settings);top.addView(setting,new LinearLayout.LayoutParams(dp(72),dp(48)));
-  stats=text("",17);stats.setId(201);content.addView(stats);updateStats();
+  stats=text("",17);stats.setId(201);content.addView(stats);
+  starMeter=new StarMeterView(this,rating(),s.puzzle.moves);content.addView(starMeter,new LinearLayout.LayoutParams(-1,dp(78)));updateStats();
   board=new BoardView(this,s.puzzle,s.mode.equals("photo")?s.bitmap:null,prefs.getBoolean("tap",false),this::move);
   content.addView(board,new LinearLayout.LayoutParams(-1,-2));
   if(s.puzzle.solved()){
-   TextView done=text("완성했어요!",30);done.setId(202);done.setTypeface(null,Typeface.BOLD);content.addView(done);content.addView(text("한 칸씩, 멋지게 해냈어요!",17));
+   int earned=earnedStars();TextView reward=text(starString(earned),52);reward.setId(203);reward.setTextColor(GOLD);reward.setGravity(Gravity.CENTER);reward.setTypeface(null,Typeface.BOLD);reward.setContentDescription("별 "+earned+"개 획득");content.addView(reward,new LinearLayout.LayoutParams(-1,-2));
+   TextView done=text("완성했어요!",30);done.setId(202);done.setTypeface(null,Typeface.BOLD);done.setGravity(Gravity.CENTER);content.addView(done);TextView earnedText=text("별 "+earned+"개 획득!",20);earnedText.setGravity(Gravity.CENTER);content.addView(earnedText);content.addView(text("한 칸씩, 멋지게 해냈어요!",17));
    Button again=button("다시 도전",112,this::startGame);primary(again);content.addView(again);
-   content.addView(button("다른 퍼즐",113,()->{s.screen="home";s.puzzle=null;save();render();}));
+   content.addView(button("다른 퍼즐",113,()->{s.screen="home";s.puzzle=null;s.starBaseline=0;save();render();}));
   }else{
    content.addView(text(prefs.getBoolean("tap",false)?"빈칸 옆 조각을 누르거나 밀어 주세요.":"빈칸 옆 조각을 빈칸 쪽으로 밀어 주세요.",15));
    content.addView(button("새로 섞기",114,()->confirmDiscard(this::startGame)));
@@ -192,9 +198,9 @@ public class MainActivity extends Activity {
   board.animateMove(index,blank,()->{if(isDestroyed())return;render();if(completed&&foreground)celebrate();});
  }
  private void celebrate(){
-  confetti=new ConfettiView(this);root.addView(confetti,new FrameLayout.LayoutParams(-1,-1));confetti.start();root.announceForAccessibility("완성했어요! "+s.puzzle.moves+"번 이동했습니다.");
+  int earned=earnedStars();confetti=new ConfettiView(this,earned);root.addView(confetti,new FrameLayout.LayoutParams(-1,-1));confetti.start();root.announceForAccessibility("완성했어요! 별 "+earned+"개를 획득했습니다. "+s.puzzle.moves+"번 이동했습니다.");
  }
- private void updateStats(){if(stats==null||s.puzzle==null)return;long seconds=elapsed()/1000;stats.setText(String.format(Locale.KOREAN,"%d × %d     •     %02d:%02d     •     %d번 이동",s.size,s.size,seconds/60,seconds%60,s.puzzle.moves));}
+ private void updateStats(){if(stats==null||s.puzzle==null)return;long seconds=elapsed()/1000;stats.setText(String.format(Locale.KOREAN,"%d × %d     •     %02d:%02d     •     %d번 이동",s.size,s.size,seconds/60,seconds%60,s.puzzle.moves));if(starMeter!=null)starMeter.setMoves(s.puzzle.moves);}
  private void preview(){
   if(s.bitmap==null)return;ImageView image=new ImageView(this);image.setImageBitmap(s.bitmap);image.setAdjustViewBounds(true);image.setContentDescription("퍼즐 완성 사진");
   new AlertDialog.Builder(this).setTitle("완성 사진").setView(image).setPositiveButton("계속하기",null).show();
@@ -209,6 +215,6 @@ public class MainActivity extends Activity {
  private void confirmDiscard(Runnable yes){
   if(s.puzzle!=null&&!s.puzzle.solved()&&s.puzzle.moves>0){pauseClock();AlertDialog d=new AlertDialog.Builder(this).setTitle("진행 중인 퍼즐을 그만둘까요?").setMessage("현재 퍼즐의 진행 상황이 사라집니다.").setNegativeButton("계속하기",null).setPositiveButton("새로 시작",(dialog,w)->yes.run()).create();d.setOnDismissListener(dialog->resumeClock());d.show();}else yes.run();
  }
- @Override public void onBackPressed(){if(s.pending){toast("사진 준비가 끝날 때까지 잠시 기다려 주세요.");return;}if(s.screen.equals("home")){super.onBackPressed();return;}confirmDiscard(()->{pauseClock();s.screen="home";s.puzzle=null;save();render();});}
+ @Override public void onBackPressed(){if(s.pending){toast("사진 준비가 끝날 때까지 잠시 기다려 주세요.");return;}if(s.screen.equals("home")){super.onBackPressed();return;}confirmDiscard(()->{pauseClock();s.screen="home";s.puzzle=null;s.starBaseline=0;save();render();});}
  private void toast(String message){Toast.makeText(this,message,Toast.LENGTH_LONG).show();}
 }
