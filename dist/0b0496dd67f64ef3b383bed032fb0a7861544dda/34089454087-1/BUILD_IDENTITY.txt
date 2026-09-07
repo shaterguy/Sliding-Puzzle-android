@@ -1,0 +1,10 @@
+source_sha=0b0496dd67f64ef3b383bed032fb0a7861544dda
+run_id=34089454087
+run_attempt=1
+channel=DEV
+signing=ephemeral-debug
+validation_source_sha=8e76ae6230019323e3cdd6177a9caf35c5fedbba
+validation_run_id=34088822215
+validation_job_id=101638005746
+unit_tests=5_PASS_REUSED
+runtime_tests=8_PASS_REUSED
