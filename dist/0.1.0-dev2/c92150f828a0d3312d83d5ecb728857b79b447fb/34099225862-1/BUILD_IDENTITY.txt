@@ -1,0 +1,9 @@
+source_sha=c92150f828a0d3312d83d5ecb728857b79b447fb
+run_id=34099225862
+run_attempt=1
+channel=DEV
+version=0.1.0-dev2
+version_code=2
+package=com.shaterguy.slidingpuzzle.dev
+signer_cert_sha256=84f40f4d1343540040f060ac923c83520c46cae81111b7871fec0e59655c8277
+update_test=PASS
