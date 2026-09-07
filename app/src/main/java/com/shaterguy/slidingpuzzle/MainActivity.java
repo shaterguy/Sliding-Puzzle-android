@@ -43,7 +43,7 @@ public class MainActivity extends Activity {
   if(s.puzzle==null&&(s.screen.equals("game")||s.screen.equals("done")))s.screen="home";
  }
  @Override public Object onRetainNonConfigurationInstance(){return s;}
- @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);receive(intent);}
+ @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);receive(intent);}
  private void receive(Intent intent){
   if(intent==null||!Intent.ACTION_SEND.equals(intent.getAction()))return;
   String type=intent.getType();if(type==null||!type.startsWith("image/")){toast("사진 파일을 공유해 주세요.");return;}
@@ -51,15 +51,14 @@ public class MainActivity extends Activity {
   try {
    uri=Build.VERSION.SDK_INT>=33?intent.getParcelableExtra(Intent.EXTRA_STREAM,Uri.class):intent.getParcelableExtra(Intent.EXTRA_STREAM);
    if(uri==null&&intent.getClipData()!=null&&intent.getClipData().getItemCount()>0)uri=intent.getClipData().getItemAt(0).getUri();
-  } catch(RuntimeException malformed) {intent.setAction(null);toast("공유된 사진을 읽을 수 없습니다.");return;}
-  intent.setAction(null);setIntent(intent);
+  } catch(RuntimeException malformed) {toast("공유된 사진을 읽을 수 없습니다.");return;}
   if(uri==null){toast("공유된 사진을 읽을 수 없습니다.");return;}
   final Uri chosen=uri;confirmDiscard(()->importPhoto(chosen));
  }
  @Override protected void onResume(){super.onResume();foreground=true;resumeClock();}
  @Override protected void onPause(){pauseClock();foreground=false;if(confetti!=null)confetti.stop();if(moving)render();save();super.onPause();}
  @Override protected void onDestroy(){if(s.activity==this)s.activity=null;MAIN.removeCallbacks(ticker);super.onDestroy();}
- private void resumeClock(){if(foreground&&s.started&&s.screen.equals("game")&&s.puzzle!=null&&!s.puzzle.solved()&&runningSince==0){runningSince=SystemClock.elapsedRealtime();MAIN.post(ticker);}}
+ private void resumeClock(){if(foreground&&!s.pending&&s.started&&s.screen.equals("game")&&s.puzzle!=null&&!s.puzzle.solved()&&runningSince==0){runningSince=SystemClock.elapsedRealtime();MAIN.post(ticker);}}
  private void pauseClock(){if(runningSince>0){s.elapsed+=SystemClock.elapsedRealtime()-runningSince;runningSince=0;}MAIN.removeCallbacks(ticker);}
  private long elapsed(){return s.elapsed+(runningSince>0?SystemClock.elapsedRealtime()-runningSince:0);}
  private void save(){saveSession(s,prefs,elapsed());}
