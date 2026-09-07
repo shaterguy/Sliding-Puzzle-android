@@ -36,12 +36,29 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${KEYSTORE_B64:-}" ]; then
-            echo '::error::SP_DEV_KEYSTORE_BASE64 is required before an installable DEV APK can be published.'
+            echo '::error::SP_DEV_KEYSTORE_BASE64 is missing.'
             exit 1
           fi
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/$KEYSTORE_FILE"
-          chmod 600 "$RUNNER_TEMP/$KEYSTORE_FILE"
-          keytool -list -keystore "$RUNNER_TEMP/$KEYSTORE_FILE" -storepass android -alias androiddebugkey >/dev/null
+          keyfile="$RUNNER_TEMP/$KEYSTORE_FILE"
+          if ! printf '%s' "$KEYSTORE_B64" | base64 --decode > "$keyfile"; then
+            echo '::error::SP_DEV_KEYSTORE_BASE64 is not valid Base64. Recreate the secret from the raw keystore bytes.'
+            exit 1
+          fi
+          chmod 600 "$keyfile"
+          bytes=$(wc -c < "$keyfile")
+          if [ "$bytes" -lt 500 ]; then
+            echo "::error::Decoded keystore is unexpectedly small (${bytes} bytes). The secret likely contains the wrong value."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$keyfile" -storepass android >/dev/null 2>&1; then
+            echo '::error::Decoded keystore cannot be opened with store password android. Recreate the keystore with the provided command or replace the secret with the matching keystore.'
+            exit 1
+          fi
+          if ! keytool -list -keystore "$keyfile" -storepass android -alias androiddebugkey >/dev/null 2>&1; then
+            echo '::error::Keystore opens, but alias androiddebugkey is missing. Recreate it with alias androiddebugkey or replace the secret.'
+            exit 1
+          fi
+          echo "Persistent signer preflight PASS (${bytes} decoded bytes; alias verified)."
       - name: Build current and lower-version update fixture
         env:
           DEV_KEYSTORE_PATH: ${{ runner.temp }}/sliding-puzzle-dev.keystore
